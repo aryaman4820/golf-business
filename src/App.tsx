@@ -11,6 +11,7 @@ import {
   clearConfig,
   createSupabaseClient,
   loadStoredConfig,
+  saveConfig,
   type SupabaseConfig,
 } from "./lib/supabase";
 
