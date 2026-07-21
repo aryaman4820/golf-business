@@ -276,8 +276,9 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       return true;
     });
 
-    // Detailed diagnostics: log the first 3 clubs with raw tier, lat, lng,
-    // and computed distance so we can see exact values in the console.
+    // Detailed diagnostics: log every club that passes the distance and tier
+    // filters with its raw tier and computed distance. Compute distance per
+    // matched club so the log reflects the value used by the filter.
     const calculateDistance = (
       centerCoords: LatLng | null,
       club: ClubProfile,
@@ -295,15 +296,28 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       return null;
     };
 
-    clubs.slice(0, 3).forEach((c) =>
-      console.log({
-        name: c.name,
-        tier: c.tier,
-        lat: c.lat,
-        lng: c.lng,
-        distanceMiles: calculateDistance(userCenterCoords, c),
-      }),
-    );
+    if (filtered.length === 0) {
+      console.log(
+        "No courses matched within",
+        radiusNum,
+        "miles of anchor",
+        userCenterCoords,
+      );
+    } else {
+      filtered.forEach((c) => {
+        const distanceMiles = calculateDistance(userCenterCoords, c);
+        console.log(
+          "MATCH FOUND:",
+          c.name,
+          "| Tier:",
+          c.tier,
+          "| Distance:",
+          distanceMiles,
+          "miles",
+        );
+      });
+    }
+
     console.log(
       "Search anchor:",
       userCenterCoords,
