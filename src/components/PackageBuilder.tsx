@@ -225,9 +225,9 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
 
     const seen = new Set<string>();
     const filtered = clubs.filter((c) => {
-      // Flexible tier match: if no tier is selected, allow all clubs through.
-      // Otherwise match permissively via bidirectional includes so case/hyphen
-      // differences never filter out courses.
+      // (3a) Flexible tier match: if no tier is selected, allow all clubs
+      // through. Otherwise match permissively via bidirectional includes so
+      // case/hyphen differences never filter out courses.
       const isTierMatch =
         !selectedTier ||
         !c.tier ||
@@ -243,26 +243,43 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         const hay = `${c.name ?? ""} ${c.location ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
+
+      // (3b/3c/3d) Bulletproof radius filtering.
       if (radiusNum !== null && center) {
-        // Guaranteed radius math fallback: explicitly convert lat/lng to
-        // numbers. If either is null/undefined/NaN and no cached geocode
-        // exists, treat the course as INCLUDED (distance = 0) so courses
-        // without coordinates are never hidden.
+        // (3a) Convert coordinates safely to numbers.
         const clubLat = Number(c.lat);
         const clubLng = Number(c.lng);
-        if (isNaN(clubLat) || isNaN(clubLng)) {
-          const cached = clubCoordinatesMap[(c.location ?? "").trim()];
-          if (!cached) {
-            // No coordinates available — keep the course visible.
-            return true;
-          }
-          const dist = haversineMiles(center.lat, center.lng, cached.lat, cached.lng);
-          if (dist > radiusNum) return false;
+
+        if (!isNaN(clubLat) && !isNaN(clubLng)) {
+          // (3c) Both user anchor and club coordinates are valid numbers:
+          // calculate Haversine distance in miles (R = 3958.8) and filter
+          // strictly by distanceMiles <= selectedRadius.
+          const distanceMiles = haversineMiles(
+            center.lat,
+            center.lng,
+            clubLat,
+            clubLng,
+          );
+          if (distanceMiles > radiusNum) return false;
         } else {
-          const dist = haversineMiles(center.lat, center.lng, clubLat, clubLng);
-          if (dist > radiusNum) return false;
+          // (3b) A club has missing/null/NaN coordinates. DO NOT exclude it!
+          // Treat it as within radius (withinRadius = true / distance = 0)
+          // so courses are never hidden from users due to missing coords.
+          const cached = clubCoordinatesMap[(c.location ?? "").trim()];
+          if (cached && !isNaN(Number(cached.lat)) && !isNaN(Number(cached.lng))) {
+            const distanceMiles = haversineMiles(
+              center.lat,
+              center.lng,
+              Number(cached.lat),
+              Number(cached.lng),
+            );
+            if (distanceMiles > radiusNum) return false;
+          }
+          // No usable coordinates at all -> auto-include (withinRadius = true).
+          return true;
         }
       }
+
       if (maxPrice !== null) {
         const price = Number(c.price_full_7day_adult) || 0;
         if (price > maxPrice) return false;
