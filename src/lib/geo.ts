@@ -21,9 +21,10 @@ export function haversineMiles(
 }
 
 // Dynamic geocoding via OpenStreetMap's free public Nominatim API. Returns the
-// best matching UK coordinate for a free-text query, or null when the query is
-// too short, the API returns nothing, or the request fails. Callers are
-// responsible for graceful fallback (e.g. auto-including the club).
+// best matching coordinate for a free-text query (global — no country
+// restriction), or null when the query is too short, the API returns nothing,
+// or the request fails. Callers are responsible for graceful fallback (e.g.
+// auto-including the club).
 export async function fetchCoordinates(
   searchQuery: string,
 ): Promise<LatLng | null> {
@@ -32,7 +33,7 @@ export async function fetchCoordinates(
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
         searchQuery,
-      )}&countrycodes=gb&limit=1`,
+      )}&limit=1`,
     );
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (data && data.length > 0) {

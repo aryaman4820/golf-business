@@ -203,7 +203,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
 
   // Debounced dynamic geocoding of the typed location via OpenStreetMap
   // Nominatim. Fires 400ms after the user stops typing and stores the resolved
-  // UK coordinate as the radius filter's center anchor.
+  // global coordinate as the radius filter's center anchor.
   useEffect(() => {
     const q = query.trim();
     if (q.length < 3) {
@@ -222,10 +222,12 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
     return () => clearTimeout(handle);
   }, [query]);
 
-  // Sequential async club geocoding. Fires immediately after clubs load and
-  // iterates through every unique `club.location` string, fetching exact UK
-  // coordinates from Nominatim. Results are stored in `clubCoordinatesMap` so
-  // repeated locations are read from cache instead of re-fetched.
+  // Background geocoding scanner. Iterates through every club that lacks
+  // stored lat/lng, geocodes each unique `location` string once via Nominatim,
+  // caches the result in `clubCoordinatesMap`, AND persists the resolved
+  // coordinates back to the live `clubs` table so future loads skip the
+  // network call entirely. Synthetic Premium clone ids (prefix `rb-clone-`)
+  // are in-memory only and are not written to the database.
   useEffect(() => {
     if (clubs.length === 0) return;
     const missing = new Set<string>();
@@ -245,14 +247,33 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         const coords = await fetchCoordinates(loc);
         if (coords) updates[loc] = coords;
       }
-      if (!cancelled && Object.keys(updates).length > 0) {
-        setClubCoordinatesMap((prev) => ({ ...prev, ...updates }));
+      if (cancelled || Object.keys(updates).length === 0) return;
+      setClubCoordinatesMap((prev) => ({ ...prev, ...updates }));
+      // Persist resolved coordinates back to Supabase for every real club
+      // row that shares this location string. Best-effort: failures are
+      // swallowed so the filter still works in-memory via the cache.
+      for (const [loc, coords] of Object.entries(updates)) {
+        const ids = clubs
+          .filter(
+            (c) =>
+              (c.location ?? "").trim() === loc &&
+              !(c.lat != null && c.lng != null) &&
+              c.id != null &&
+              !c.id.startsWith("rb-clone-"),
+          )
+          .map((c) => c.id);
+        for (const id of ids) {
+          await client
+            .from("clubs")
+            .update({ lat: coords.lat, lng: coords.lng })
+            .eq("id", id);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [clubs, clubCoordinatesMap]);
+  }, [clubs, clubCoordinatesMap, client]);
 
   // Multi-selection state: holds the unique club ids of every selected club.
   const [selectedClubIds, setSelectedClubIds] = useState<string[]>([]);
@@ -328,19 +349,6 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
     }
     return map;
   }, [clubs, userCenterCoords, clubCoordinatesMap]);
-
-  // Count how many clubs have resolved coordinates (stored or dynamic cache).
-  const resolvedCount = useMemo(() => {
-    let count = 0;
-    for (const c of clubs) {
-      if (c.lat != null && c.lng != null) {
-        count++;
-        continue;
-      }
-      if (c.location && clubCoordinatesMap[(c.location ?? "").trim()]) count++;
-    }
-    return count;
-  }, [clubs, clubCoordinatesMap]);
 
   const filteredForActive = useMemo(() => {
     const list = grouped[activeTier] ?? [];
