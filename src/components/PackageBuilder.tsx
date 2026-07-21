@@ -35,55 +35,6 @@ type Props = {
   onGoHome?: () => void;
 };
 
-const FALLBACK_CLUBS: ClubProfile[] = [
-  {
-    id: "demo-birkdale",
-    created_at: null,
-    name: "Royal Birkdale Clone",
-    location: "Merseyside",
-    joining_fee_7day: 500,
-    joining_fee_5day: null,
-    clubhouse_bar_levy: 150,
-    year: null,
-    total_historic_revenue: null,
-    total_member_count: null,
-    price_under_12: 150,
-    price_junior_12_18: 300,
-    price_colt_21: 950,
-    price_intermediate_25: 1400,
-    price_intermediate_28: 1800,
-    price_intermediate_31_35: 2100,
-    price_full_7day_adult: 2500,
-    price_5day_adult: null,
-    price_country_member: null,
-    price_student: 650,
-    tier: "Luxury",
-  },
-  {
-    id: "demo-greenfield",
-    created_at: null,
-    name: "Greenfield Links",
-    location: "Leeds",
-    joining_fee_7day: 150,
-    joining_fee_5day: null,
-    clubhouse_bar_levy: 50,
-    year: null,
-    total_historic_revenue: null,
-    total_member_count: null,
-    price_under_12: 50,
-    price_junior_12_18: 100,
-    price_colt_21: 420,
-    price_intermediate_25: 600,
-    price_intermediate_28: 750,
-    price_intermediate_31_35: 850,
-    price_full_7day_adult: 950,
-    price_5day_adult: null,
-    price_country_member: null,
-    price_student: 380,
-    tier: "Mid-tier",
-  },
-];
-
 export default function PackageBuilder({ client, initialTier, onResetConfig, onOpenAdmin, onGoHome }: Props) {
   const [activeTier, setActiveTier] = useState<Tier>(initialTier ?? "Premium");
 
@@ -189,10 +140,19 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         .order("price_full_7day_adult", { ascending: true });
       if (error) throw error;
       const fetched = (data ?? []) as ClubProfile[];
-      setClubs(fetched.length > 0 ? fetched : FALLBACK_CLUBS);
+      if (fetched.length === 0) {
+        setError(
+          "No clubs found in the database. The clubs table may be empty or unreachable.",
+        );
+      }
+      setClubs(fetched);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load clubs");
-      setClubs(FALLBACK_CLUBS);
+      setError(
+        err instanceof Error
+          ? `Failed to load clubs: ${err.message}`
+          : "Failed to load clubs",
+      );
+      setClubs([]);
     } finally {
       setLoading(false);
     }
