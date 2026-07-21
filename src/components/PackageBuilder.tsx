@@ -210,9 +210,9 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   }, [clubs, userCenterCoords, clubCoordinatesMap]);
 
   const filteredForActive = useMemo(() => {
-    const list = grouped[activeTier] ?? [];
     const q = query.trim().toLowerCase();
     const radiusNum = radius !== null ? Number(radius) : null;
+    const selectedTier = activeTier;
 
     // Fail-safe: if the user selected a radius but the Photon geocoder hasn't
     // resolved their typed location yet (or the API failed), skip the distance
@@ -220,26 +220,42 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
     const center: LatLng | null =
       radiusNum !== null && userCenterCoords ? userCenterCoords : null;
 
-    const filtered = list.filter((c) => {
+    const seen = new Set<string>();
+    const filtered = clubs.filter((c) => {
+      // Normalized tier comparison so case/hyphen differences don't filter
+      // out courses ("Mid-tier" === "midtier" === "MidTier").
+      const tierMatch =
+        !selectedTier ||
+        (c.tier
+          ? c.tier.toLowerCase().replace(/[^a-z]/g, "") ===
+            selectedTier.toLowerCase().replace(/[^a-z]/g, "")
+          : false);
+      if (!tierMatch) return false;
+
+      // Dedup by club id so multi-year demographics don't fan out duplicates.
+      if (c.id && seen.has(c.id)) return false;
+      if (c.id) seen.add(c.id);
+
       if (q) {
         const hay = `${c.name ?? ""} ${c.location ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       if (radiusNum !== null && center) {
-        const clubCoords =
-          c.lat != null && c.lng != null
-            ? { lat: c.lat, lng: c.lng }
-            : clubCoordinatesMap[(c.location ?? "").trim()] ?? null;
-        // Missing coordinates -> auto-include so the user never sees a blank
-        // screen due to pending or failed geocoding.
-        if (!clubCoords) return true;
-        const dist = haversineMiles(
-          center.lat,
-          center.lng,
-          clubCoords.lat,
-          clubCoords.lng,
-        );
-        if (dist > radiusNum) return false;
+        // Safe numeric parsing: explicitly convert lat/lng to numbers. If
+        // either is NaN or missing, fall back to the cached geocode; if that
+        // is also missing, auto-include so courses without coordinates are
+        // never hidden.
+        const clubLat = Number(c.lat);
+        const clubLng = Number(c.lng);
+        if (isNaN(clubLat) || isNaN(clubLng)) {
+          const cached = clubCoordinatesMap[(c.location ?? "").trim()];
+          if (!cached) return true;
+          const dist = haversineMiles(center.lat, center.lng, cached.lat, cached.lng);
+          if (dist > radiusNum) return false;
+        } else {
+          const dist = haversineMiles(center.lat, center.lng, clubLat, clubLng);
+          if (dist > radiusNum) return false;
+        }
       }
       if (maxPrice !== null) {
         const price = Number(c.price_full_7day_adult) || 0;
@@ -254,10 +270,37 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       return true;
     });
 
-    // Temporary diagnostic for the radius-search fail-safe.
-    console.log("Search anchor:", userCenterCoords, "Club count:", filtered.length);
+    // Detailed per-club diagnostics for the radius-search fail-safe.
+    const calculateDistance = (
+      centerCoords: LatLng | null,
+      club: ClubProfile,
+    ): number | null => {
+      if (!centerCoords) return null;
+      const clubLat = Number(club.lat);
+      const clubLng = Number(club.lng);
+      if (!isNaN(clubLat) && !isNaN(clubLng)) {
+        return haversineMiles(centerCoords.lat, centerCoords.lng, clubLat, clubLng);
+      }
+      const cached = clubCoordinatesMap[(club.location ?? "").trim()];
+      if (cached) {
+        return haversineMiles(centerCoords.lat, centerCoords.lng, cached.lat, cached.lng);
+      }
+      return null;
+    };
+
+    clubs.forEach((c) =>
+      console.log(c.name, "Tier Match:", c.tier, "Distance (miles):", calculateDistance(userCenterCoords, c)),
+    );
+    console.log(
+      "Search anchor:",
+      userCenterCoords,
+      "Selected Radius:",
+      radiusNum,
+      "Filtered Club count:",
+      filtered.length,
+    );
     return filtered;
-  }, [grouped, activeTier, query, maxPrice, activeAmenities, radius, userCenterCoords, clubCoordinatesMap]);
+  }, [clubs, activeTier, query, maxPrice, activeAmenities, radius, userCenterCoords, clubCoordinatesMap]);
 
   // Flatten all tiers so a selection made in one tab persists when the user
   // switches tabs and adds clubs from another tier.
