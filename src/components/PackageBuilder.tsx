@@ -212,25 +212,26 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   const filteredForActive = useMemo(() => {
     const list = grouped[activeTier] ?? [];
     const q = query.trim().toLowerCase();
+    const radiusNum = radius !== null ? Number(radius) : null;
 
-    // The radius filter's center anchor is always the dynamically geocoded
-    // coordinate from Photon for the user's typed location.
-    const center: LatLng | null = radius !== null ? userCenterCoords : null;
+    // Fail-safe: if the user selected a radius but the Photon geocoder hasn't
+    // resolved their typed location yet (or the API failed), skip the distance
+    // filter entirely and show all clubs for the selected tier.
+    const center: LatLng | null =
+      radiusNum !== null && userCenterCoords ? userCenterCoords : null;
 
-    return list.filter((c) => {
+    const filtered = list.filter((c) => {
       if (q) {
         const hay = `${c.name ?? ""} ${c.location ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
-      if (radius !== null && center) {
-        // Unified Haversine comparison: both sides resolved dynamically.
+      if (radiusNum !== null && center) {
         const clubCoords =
           c.lat != null && c.lng != null
             ? { lat: c.lat, lng: c.lng }
             : clubCoordinatesMap[(c.location ?? "").trim()] ?? null;
-        // Auto-include on API failures: if Photon hasn't returned coordinates
-        // for this club yet, pass it through as true so the user never sees
-        // a blank screen due to network limits.
+        // Missing coordinates -> auto-include so the user never sees a blank
+        // screen due to pending or failed geocoding.
         if (!clubCoords) return true;
         const dist = haversineMiles(
           center.lat,
@@ -238,7 +239,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
           clubCoords.lat,
           clubCoords.lng,
         );
-        if (dist > radius) return false;
+        if (dist > radiusNum) return false;
       }
       if (maxPrice !== null) {
         const price = Number(c.price_full_7day_adult) || 0;
@@ -252,6 +253,10 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       }
       return true;
     });
+
+    // Temporary diagnostic for the radius-search fail-safe.
+    console.log("Search anchor:", userCenterCoords, "Club count:", filtered.length);
+    return filtered;
   }, [grouped, activeTier, query, maxPrice, activeAmenities, radius, userCenterCoords, clubCoordinatesMap]);
 
   // Flatten all tiers so a selection made in one tab persists when the user
