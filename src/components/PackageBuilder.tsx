@@ -50,13 +50,13 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   const [radius, setRadius] = useState<RadiusOption>(null);
   const [userCenterCoords, setUserCenterCoords] = useState<LatLng | null>(null);
   // Persistent lookup cache: maps a club location string to its dynamically
-  // resolved Nominatim coordinates. Each unique location is fetched at most
+  // resolved Photon coordinates. Each unique location is fetched at most
   // once to prevent duplicate network calls.
   const [clubCoordinatesMap, setClubCoordinatesMap] = useState<Record<string, LatLng>>({});
   const [showFilters, setShowFilters] = useState(true);
 
-  // Debounced dynamic geocoding of the typed location via OpenStreetMap
-  // Nominatim. Fires 400ms after the user stops typing and stores the resolved
+  // Debounced dynamic geocoding of the typed location via the Komoot Photon
+  // API. Fires 400ms after the user stops typing and stores the resolved
   // global coordinate as the radius filter's center anchor.
   useEffect(() => {
     const q = query.trim();
@@ -111,7 +111,8 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
             (c) =>
               (c.location ?? "").trim() === loc &&
               !(c.lat != null && c.lng != null) &&
-              c.id != null,
+              c.id != null &&
+              !c.id.startsWith("rb-clone-"),
           )
           .map((c) => c.id);
         for (const id of ids) {
@@ -183,7 +184,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   }, [clubs]);
 
   // Unified distance map. Both the user's typed location and each club's
-  // location are resolved dynamically via Nominatim, then compared with the
+  // location are resolved dynamically via Photon, then compared with the
   // shared Haversine formula. Clubs whose coordinates are still pending or
   // failed to resolve are stored as null (the filter auto-includes them).
   const distanceMap = useMemo(() => {
@@ -213,7 +214,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
     const q = query.trim().toLowerCase();
 
     // The radius filter's center anchor is always the dynamically geocoded
-    // coordinate from Nominatim for the user's typed location.
+    // coordinate from Photon for the user's typed location.
     const center: LatLng | null = radius !== null ? userCenterCoords : null;
 
     return list.filter((c) => {
@@ -227,9 +228,9 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
           c.lat != null && c.lng != null
             ? { lat: c.lat, lng: c.lng }
             : clubCoordinatesMap[(c.location ?? "").trim()] ?? null;
-        // Auto-include on API failures: if Nominatim is rate-limited or hasn't
-        // returned coordinates for this club yet, pass it through as true so
-        // the user never sees a blank screen due to network limits.
+        // Auto-include on API failures: if Photon hasn't returned coordinates
+        // for this club yet, pass it through as true so the user never sees
+        // a blank screen due to network limits.
         if (!clubCoords) return true;
         const dist = haversineMiles(
           center.lat,

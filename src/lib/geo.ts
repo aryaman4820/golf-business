@@ -20,27 +20,34 @@ export function haversineMiles(
   return R * c;
 }
 
-// Dynamic geocoding via OpenStreetMap's free public Nominatim API. Returns the
-// best matching coordinate for a free-text query (global — no country
-// restriction), or null when the query is too short, the API returns nothing,
-// or the request fails. Callers are responsible for graceful fallback (e.g.
-// auto-including the club).
+// Dynamic geocoding via Komoot's Photon API (CORS-friendly, no API key).
+// Returns the best matching coordinate for a free-text query (global — no
+// country restriction), or null when the query is too short, the API
+// returns nothing, or the request fails. Photon returns GeoJSON with
+// coordinates ordered [lng, lat], so we map coords[1] → lat, coords[0] → lng.
 export async function fetchCoordinates(
   searchQuery: string,
 ): Promise<LatLng | null> {
   if (!searchQuery || searchQuery.trim().length < 3) return null;
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-        searchQuery,
-      )}&limit=1`,
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=1`,
     );
-    const data = (await res.json()) as Array<{ lat: string; lon: string }>;
-    if (data && data.length > 0) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    if (!res.ok) {
+      console.warn("Geocoding fallback for:", searchQuery);
+      return null;
+    }
+    const data = (await res.json()) as {
+      features?: Array<{ geometry?: { coordinates?: [number, number] } }>;
+    };
+    const coords = data?.features?.[0]?.geometry?.coordinates;
+    if (coords && coords.length === 2) {
+      return { lat: coords[1], lng: coords[0] };
     }
   } catch (err) {
-    console.error("Geocoding failed:", err);
+    console.warn("Geocoding fallback for:", searchQuery, err);
+    return null;
   }
+  console.warn("Geocoding fallback for:", searchQuery);
   return null;
 }
