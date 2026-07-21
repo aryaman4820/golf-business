@@ -35,103 +35,6 @@ type Props = {
   onGoHome?: () => void;
 };
 
-// Four distinct Premium clubs with stable, unique IDs. Sourced directly so the
-// Premium tab always renders exactly these cards independent of DB state.
-const PREMIUM_CLONES: ClubProfile[] = [
-  {
-    id: "rb-clone-1",
-    created_at: null,
-    name: "Royal Birkdale Clone (North)",
-    location: "Southport, England",
-    joining_fee_7day: 1450,
-    joining_fee_5day: 1180,
-    clubhouse_bar_levy: 150,
-    year: 2025,
-    total_historic_revenue: 250000,
-    total_member_count: 320,
-    price_under_12: 120,
-    price_junior_12_18: 240,
-    price_colt_21: 360,
-    price_intermediate_25: 520,
-    price_intermediate_28: 640,
-    price_intermediate_31_35: 760,
-    price_full_7day_adult: 1450,
-    price_5day_adult: 1180,
-    price_country_member: 700,
-    price_student: 420,
-    tier: "Premium",
-  },
-  {
-    id: "rb-clone-2",
-    created_at: null,
-    name: "Royal Birkdale Clone (South)",
-    location: "Southport, England",
-    joining_fee_7day: 1520,
-    joining_fee_5day: 1240,
-    clubhouse_bar_levy: 160,
-    year: 2025,
-    total_historic_revenue: 265000,
-    total_member_count: 335,
-    price_under_12: 125,
-    price_junior_12_18: 250,
-    price_colt_21: 380,
-    price_intermediate_25: 540,
-    price_intermediate_28: 670,
-    price_intermediate_31_35: 790,
-    price_full_7day_adult: 1520,
-    price_5day_adult: 1240,
-    price_country_member: 720,
-    price_student: 430,
-    tier: "Premium",
-  },
-  {
-    id: "rb-clone-3",
-    created_at: null,
-    name: "Royal Birkdale Clone (Links)",
-    location: "Merseyside, England",
-    joining_fee_7day: 1680,
-    joining_fee_5day: 1380,
-    clubhouse_bar_levy: 175,
-    year: 2025,
-    total_historic_revenue: 290000,
-    total_member_count: 360,
-    price_under_12: 135,
-    price_junior_12_18: 270,
-    price_colt_21: 410,
-    price_intermediate_25: 580,
-    price_intermediate_28: 720,
-    price_intermediate_31_35: 850,
-    price_full_7day_adult: 1680,
-    price_5day_adult: 1380,
-    price_country_member: 760,
-    price_student: 460,
-    tier: "Premium",
-  },
-  {
-    id: "rb-clone-4",
-    created_at: null,
-    name: "Royal Birkdale Clone (Championship)",
-    location: "Ainsdale, England",
-    joining_fee_7day: 1890,
-    joining_fee_5day: 1560,
-    clubhouse_bar_levy: 195,
-    year: 2025,
-    total_historic_revenue: 320000,
-    total_member_count: 390,
-    price_under_12: 150,
-    price_junior_12_18: 300,
-    price_colt_21: 450,
-    price_intermediate_25: 640,
-    price_intermediate_28: 790,
-    price_intermediate_31_35: 930,
-    price_full_7day_adult: 1890,
-    price_5day_adult: 1560,
-    price_country_member: 820,
-    price_student: 500,
-    tier: "Premium",
-  },
-];
-
 const FALLBACK_CLUBS: ClubProfile[] = [
   {
     id: "demo-birkdale",
@@ -226,8 +129,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   // stored lat/lng, geocodes each unique `location` string once via Nominatim,
   // caches the result in `clubCoordinatesMap`, AND persists the resolved
   // coordinates back to the live `clubs` table so future loads skip the
-  // network call entirely. Synthetic Premium clone ids (prefix `rb-clone-`)
-  // are in-memory only and are not written to the database.
+  // network call entirely.
   useEffect(() => {
     if (clubs.length === 0) return;
     const missing = new Set<string>();
@@ -258,8 +160,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
             (c) =>
               (c.location ?? "").trim() === loc &&
               !(c.lat != null && c.lng != null) &&
-              c.id != null &&
-              !c.id.startsWith("rb-clone-"),
+              c.id != null,
           )
           .map((c) => c.id);
         for (const id of ids) {
@@ -302,21 +203,18 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Group clubs by tier. Premium is always sourced from PREMIUM_CLONES so the
-  // four stable-id cards render regardless of DB contents. Other tiers come
-  // from Supabase (deduped by club.id so multi-year demographics don't fan out
-  // into duplicate cards sharing one id).
+  // Group clubs by tier. All tiers come from Supabase, deduped by club.id so
+  // multi-year demographics don't fan out into duplicate cards sharing one id.
   const grouped = useMemo(() => {
     const map: Record<Tier, ClubProfile[]> = {
       Budget: [],
       "Mid-tier": [],
-      Premium: PREMIUM_CLONES,
+      Premium: [],
       Luxury: [],
     };
     const seen = new Set<string>();
     for (const c of clubs) {
       if (!c.tier || !(TIER_ORDER as string[]).includes(c.tier)) continue;
-      if (c.tier === "Premium") continue; // Premium handled by PREMIUM_CLONES
       if (c.id && seen.has(c.id)) continue;
       if (c.id) seen.add(c.id);
       map[c.tier].push(c);
