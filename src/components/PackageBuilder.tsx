@@ -210,6 +210,9 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   }, [clubs, userCenterCoords, clubCoordinatesMap]);
 
   const filteredForActive = useMemo(() => {
+    // Immediate raw diagnostic: how many clubs did Supabase actually return?
+    console.log("Raw clubs array length loaded from Supabase:", clubs?.length);
+
     const q = query.trim().toLowerCase();
     const radiusNum = radius !== null ? Number(radius) : null;
     const selectedTier = activeTier;
@@ -222,15 +225,15 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
 
     const seen = new Set<string>();
     const filtered = clubs.filter((c) => {
-      // Normalized tier comparison so case/hyphen differences don't filter
-      // out courses ("Mid-tier" === "midtier" === "MidTier").
-      const tierMatch =
+      // Flexible tier match: if no tier is selected, allow all clubs through.
+      // Otherwise match permissively via bidirectional includes so case/hyphen
+      // differences never filter out courses.
+      const isTierMatch =
         !selectedTier ||
-        (c.tier
-          ? c.tier.toLowerCase().replace(/[^a-z]/g, "") ===
-            selectedTier.toLowerCase().replace(/[^a-z]/g, "")
-          : false);
-      if (!tierMatch) return false;
+        !c.tier ||
+        c.tier.toLowerCase().trim().includes(selectedTier.toLowerCase().trim()) ||
+        selectedTier.toLowerCase().trim().includes(c.tier.toLowerCase().trim());
+      if (!isTierMatch) return false;
 
       // Dedup by club id so multi-year demographics don't fan out duplicates.
       if (c.id && seen.has(c.id)) return false;
@@ -241,15 +244,18 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         if (!hay.includes(q)) return false;
       }
       if (radiusNum !== null && center) {
-        // Safe numeric parsing: explicitly convert lat/lng to numbers. If
-        // either is NaN or missing, fall back to the cached geocode; if that
-        // is also missing, auto-include so courses without coordinates are
-        // never hidden.
+        // Guaranteed radius math fallback: explicitly convert lat/lng to
+        // numbers. If either is null/undefined/NaN and no cached geocode
+        // exists, treat the course as INCLUDED (distance = 0) so courses
+        // without coordinates are never hidden.
         const clubLat = Number(c.lat);
         const clubLng = Number(c.lng);
         if (isNaN(clubLat) || isNaN(clubLng)) {
           const cached = clubCoordinatesMap[(c.location ?? "").trim()];
-          if (!cached) return true;
+          if (!cached) {
+            // No coordinates available — keep the course visible.
+            return true;
+          }
           const dist = haversineMiles(center.lat, center.lng, cached.lat, cached.lng);
           if (dist > radiusNum) return false;
         } else {
@@ -270,7 +276,8 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       return true;
     });
 
-    // Detailed per-club diagnostics for the radius-search fail-safe.
+    // Detailed diagnostics: log the first 3 clubs with raw tier, lat, lng,
+    // and computed distance so we can see exact values in the console.
     const calculateDistance = (
       centerCoords: LatLng | null,
       club: ClubProfile,
@@ -288,8 +295,14 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       return null;
     };
 
-    clubs.forEach((c) =>
-      console.log(c.name, "Tier Match:", c.tier, "Distance (miles):", calculateDistance(userCenterCoords, c)),
+    clubs.slice(0, 3).forEach((c) =>
+      console.log({
+        name: c.name,
+        tier: c.tier,
+        lat: c.lat,
+        lng: c.lng,
+        distanceMiles: calculateDistance(userCenterCoords, c),
+      }),
     );
     console.log(
       "Search anchor:",
