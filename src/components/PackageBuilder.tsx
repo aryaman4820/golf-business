@@ -14,15 +14,7 @@ import {
   type ResolvedLocation,
 } from "../lib/geo";
 
-export type RadiusOption = number | null;
-
-const RADIUS_OPTIONS: { label: string; value: RadiusOption }[] = [
-  { label: "5 miles", value: 5 },
-  { label: "10 miles", value: 10 },
-  { label: "25 miles", value: 25 },
-  { label: "50 miles", value: 50 },
-  { label: "Anywhere", value: null },
-];
+export type RadiusOption = number | "unlimited";
 
 type AmenityKey = "buggies" | "dining" | "gym" | "storage";
 
@@ -53,7 +45,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   const [query, setQuery] = useState("");
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
   const [activeAmenities, setActiveAmenities] = useState<Set<AmenityKey>>(new Set());
-  const [radius, setRadius] = useState<RadiusOption>(null);
+  const [radius, setRadius] = useState<RadiusOption>(25);
   const [userCenterCoords, setUserCenterCoords] = useState<LatLng | null>(null);
   const [resolvedLocation, setResolvedLocation] = useState<ResolvedLocation | null>(null);
   // Persistent lookup cache: maps a club location string to its dynamically
@@ -241,12 +233,13 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
     console.log("Raw clubs array length loaded from Supabase:", clubs?.length);
 
     const q = query.trim().toLowerCase();
-    const radiusNum = radius !== null ? Number(radius) : null;
+    const isUnlimited = radius === "unlimited";
+    const radiusNum = isUnlimited ? null : radius;
     const selectedTier = activeTier;
 
-    // Fail-safe: if the user selected a radius but the Photon geocoder hasn't
-    // resolved their typed location yet (or the API failed), skip the distance
-    // filter entirely and show all clubs for the selected tier.
+    // Fail-safe: if the user selected a numeric radius but the Photon geocoder
+    // hasn't resolved their typed location yet (or the API failed), skip the
+    // distance filter entirely and show all clubs for the selected tier.
     const center: LatLng | null =
       radiusNum !== null && userCenterCoords ? userCenterCoords : null;
 
@@ -278,8 +271,10 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         const hay = `${c.name ?? ""} ${c.location ?? ""}`;
         if (!fuzzyMatch(query, hay)) return false;
       }
-      // (3b/3c/3d) Bulletproof radius filtering.
-      if (radiusNum !== null && center) {
+      // (3b/3c/3d) Bulletproof radius filtering. "Unlimited" bypasses the
+      // Haversine distance check entirely — every tier-matched club is
+      // included regardless of distance, then price/amenities still apply.
+      if (!isUnlimited && radiusNum !== null && center) {
         // (3a) Convert coordinates safely to numbers.
         const clubLat = Number(c.lat);
         const clubLng = Number(c.lng);
@@ -469,7 +464,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
                 clearAll={() => {
                   setQuery("");
                   setMaxPrice(null);
-                  setRadius(null);
+                  setRadius("unlimited");
                   setActiveAmenities(new Set());
                 }}
                 resultCount={filteredForActive.length}
@@ -490,6 +485,26 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
             </div>
 
             <div className="mt-6">
+              <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-stone-500">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>
+                  Showing courses within:{" "}
+                  {radius === "unlimited" ? (
+                    <span className="text-stone-700 font-semibold">
+                      Unlimited radius (All regions)
+                    </span>
+                  ) : (
+                    <span className="text-stone-700 font-semibold tabular-nums">
+                      {radius} miles
+                    </span>
+                  )}
+                  {resolvedLocation && radius !== "unlimited" && (
+                    <span className="text-stone-400">
+                      {" "}of {resolvedLocation.displayName}
+                    </span>
+                  )}
+                </span>
+              </div>
               {loading ? (
                 <LoadingState />
               ) : error ? (
@@ -790,7 +805,7 @@ function FilterBar({
   setShow,
 }: FilterBarProps) {
   const priceCap = 3000;
-  const hasFilters = query.trim() !== "" || maxPrice !== null || radius !== null || activeAmenities.size > 0;
+  const hasFilters = query.trim() !== "" || maxPrice !== null || radius !== "unlimited" || activeAmenities.size > 0;
   return (
     <div className="bg-white/80 backdrop-blur-md border border-stone-200 rounded-2xl shadow-sm shadow-stone-900/5 overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-stone-100">
@@ -825,8 +840,8 @@ function FilterBar({
       >
         <div className="overflow-hidden">
           <div className="px-4 sm:px-5 py-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <label className="block text-[11px] font-medium uppercase tracking-wider text-stone-400 mb-1.5">
                   Location or club
                 </label>
@@ -847,29 +862,7 @@ function FilterBar({
                   </div>
                 )}
               </div>
-              <div className="md:col-span-1">
-                <label className="block text-[11px] font-medium uppercase tracking-wider text-stone-400 mb-1.5">
-                  Distance radius
-                </label>
-                <div className="relative">
-                  <MapPin className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <select
-                    value={radius === null ? "any" : String(radius)}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setRadius(v === "any" ? null : Number(v));
-                    }}
-                    className="w-full pl-9 pr-8 py-2.5 text-sm rounded-xl border border-stone-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all duration-200 appearance-none cursor-pointer"
-                  >
-                    {RADIUS_OPTIONS.map((opt) => (
-                      <option key={opt.label} value={opt.value === null ? "any" : String(opt.value)}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="md:col-span-1">
+              <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-[11px] font-medium uppercase tracking-wider text-stone-400">
                     Maximum 7-day adult price
@@ -898,6 +891,62 @@ function FilterBar({
                   >
                     Any
                   </button>
+                </div>
+              </div>
+            </div>
+            <div className="pt-1">
+              <div className="flex items-center justify-between mb-2">
+                <label className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-stone-400">
+                  Distance radius
+                  {radius !== "unlimited" && (
+                    <span className="text-emerald-700 font-semibold normal-case tracking-normal tabular-nums">
+                      {radius} miles
+                    </span>
+                  )}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setRadius(radius === "unlimited" ? 25 : "unlimited")}
+                  className={`text-xs px-3 py-1 rounded-full font-medium border transition-all duration-300 ${
+                    radius === "unlimited"
+                      ? "bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-500/30"
+                      : "bg-white text-stone-500 border-stone-200 hover:border-emerald-300 hover:text-emerald-700"
+                  }`}
+                >
+                  Unlimited
+                </button>
+              </div>
+              <div
+                className={`flex items-center gap-3 transition-opacity duration-300 ${
+                  radius === "unlimited" ? "opacity-40 pointer-events-none" : "opacity-100"
+                }`}
+              >
+                <input
+                  type="range"
+                  min={1}
+                  max={150}
+                  step={1}
+                  value={radius === "unlimited" ? 150 : radius}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setRadius(v >= 150 ? "unlimited" : v);
+                  }}
+                  className="flex-1 accent-emerald-600 cursor-pointer"
+                />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min={1}
+                    value={radius === "unlimited" ? "" : radius}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "") return;
+                      const n = Number(v);
+                      if (!isNaN(n) && n >= 1) setRadius(n);
+                    }}
+                    className="w-16 px-2 py-1.5 text-sm rounded-lg border border-stone-200 bg-white text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all duration-200"
+                  />
+                  <span className="text-xs text-stone-400 font-medium">mi</span>
                 </div>
               </div>
             </div>
