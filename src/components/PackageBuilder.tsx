@@ -31,9 +31,10 @@ type Props = {
   onResetConfig: () => void;
   onOpenAdmin: () => void;
   onGoHome?: () => void;
+  onViewAccount?: (membershipPassUuid: string) => void;
 };
 
-export default function PackageBuilder({ client, initialTier, onResetConfig, onOpenAdmin, onGoHome }: Props) {
+export default function PackageBuilder({ client, initialTier, onResetConfig, onOpenAdmin, onGoHome, onViewAccount }: Props) {
   const [activeTier, setActiveTier] = useState<Tier>(initialTier ?? "Premium");
 
   useEffect(() => {
@@ -548,6 +549,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
                     setSelectedClubIds((prev) => prev.filter((x) => x !== id))
                   }
                   onClear={() => setSelectedClubIds([])}
+                  onViewAccount={onViewAccount ?? (() => {})}
                 />
               </div>
             </div>

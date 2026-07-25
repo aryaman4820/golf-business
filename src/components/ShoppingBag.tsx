@@ -29,6 +29,7 @@ import {
   computePackageBreakdown,
   INCLUDED_COURSES,
   type PricingContext,
+  type PackageBreakdown,
 } from "../lib/pricing";
 import CheckoutModal from "./CheckoutModal";
 
@@ -38,11 +39,12 @@ type Props = {
   client: SupabaseClient;
   onRemove: (clubId: string) => void;
   onClear: () => void;
+  onViewAccount: (membershipPassUuid: string) => void;
 };
 
 const DEMO_CODE = "123456";
 
-export default function ShoppingBag({ activeTier, selectedClubs, client, onRemove, onClear }: Props) {
+export default function ShoppingBag({ activeTier, selectedClubs, client, onRemove, onClear, onViewAccount }: Props) {
   const theme = TIER_THEMES[activeTier];
   const count = selectedClubs.length;
 
@@ -226,7 +228,9 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
         breakdown={breakdown}
         customerEmail={customerEmail.trim()}
         customerAge={userAge}
+        isStudentVerified={isStudentVerified}
         onCompleted={onClear}
+        onViewAccount={onViewAccount}
       />
     </aside>
   );

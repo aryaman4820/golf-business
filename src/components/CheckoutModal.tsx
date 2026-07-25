@@ -15,11 +15,15 @@ import {
   Calendar,
   Sparkles,
   Trophy,
+  CalendarRange,
+  Repeat,
 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClubProfile, Tier } from "../types";
 import { TIER_THEMES, formatGBP } from "../lib/tiers";
 import type { PackageBreakdown } from "../lib/pricing";
+
+type PaymentSpread = "annually" | "monthly";
 
 type Props = {
   open: boolean;
@@ -30,7 +34,9 @@ type Props = {
   breakdown: PackageBreakdown;
   customerEmail: string;
   customerAge: number;
+  isStudentVerified: boolean;
   onCompleted: () => void;
+  onViewAccount: (membershipPassUuid: string) => void;
 };
 
 type Step = "register" | "payment" | "processing" | "receipt" | "error";
@@ -40,7 +46,11 @@ type ReceiptData = {
   customerName: string;
   customerEmail: string;
   customerAge: number;
+  customerPhone: string;
   selectedClubIds: string[];
+  tierClassification: Tier;
+  paymentSpreadType: PaymentSpread;
+  studentVerified: boolean;
   packageSubscriptionSubtotal: number;
   staticFeesTotal: number;
   grandTotal: number;
@@ -55,12 +65,15 @@ export default function CheckoutModal({
   breakdown,
   customerEmail,
   customerAge,
+  isStudentVerified,
   onCompleted,
+  onViewAccount,
 }: Props) {
   const [step, setStep] = useState<Step>("register");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
+  const [paymentSpread, setPaymentSpread] = useState<PaymentSpread>("annually");
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvc, setCardCvc] = useState("");
@@ -76,6 +89,7 @@ export default function CheckoutModal({
     setFullName("");
     setPhone("");
     setPassword("");
+    setPaymentSpread("annually");
     setCardNumber("");
     setCardExpiry("");
     setCardCvc("");
@@ -131,7 +145,11 @@ export default function CheckoutModal({
       customer_name: fullName.trim(),
       customer_email: customerEmail,
       customer_age: customerAge,
+      customer_phone: phone.trim() || null,
       selected_club_ids: selectedClubs.map((c) => c.id),
+      tier_classification: activeTier,
+      payment_spread_type: paymentSpread,
+      student_verified: isStudentVerified,
       package_subscription_subtotal: breakdown.packageSubscriptionTotal,
       static_fees_total: breakdown.totalStaticUpfrontFees,
       grand_total: breakdown.grandTotal,
@@ -142,7 +160,7 @@ export default function CheckoutModal({
       const { data, error } = await client
         .from("user_memberships")
         .insert(payload)
-        .select("membership_pass_uuid, customer_name, customer_email, customer_age, selected_club_ids, package_subscription_subtotal, static_fees_total, grand_total")
+        .select("membership_pass_uuid, customer_name, customer_email, customer_age, customer_phone, selected_club_ids, tier_classification, payment_spread_type, student_verified, package_subscription_subtotal, static_fees_total, grand_total")
         .maybeSingle();
 
       if (error) throw error;
@@ -153,7 +171,11 @@ export default function CheckoutModal({
         customerName: data.customer_name,
         customerEmail: data.customer_email,
         customerAge: data.customer_age,
+        customerPhone: data.customer_phone ?? "",
         selectedClubIds: data.selected_club_ids ?? [],
+        tierClassification: (data.tier_classification as Tier) ?? activeTier,
+        paymentSpreadType: (data.payment_spread_type as PaymentSpread) ?? "annually",
+        studentVerified: Boolean(data.student_verified),
         packageSubscriptionSubtotal: Number(data.package_subscription_subtotal),
         staticFeesTotal: Number(data.static_fees_total),
         grandTotal: Number(data.grand_total),
@@ -165,7 +187,8 @@ export default function CheckoutModal({
     }
   }
 
-  function handleReturnHome() {
+  function handleViewAccount() {
+    if (receipt) onViewAccount(receipt.membershipPassUuid);
     onCompleted();
     resetAndClose();
   }
@@ -241,6 +264,8 @@ export default function CheckoutModal({
               onPay={handlePay}
               breakdown={breakdown}
               themeLabel={theme.label}
+              paymentSpread={paymentSpread}
+              setPaymentSpread={setPaymentSpread}
             />
           )}
 
@@ -249,8 +274,9 @@ export default function CheckoutModal({
           {step === "receipt" && receipt && (
             <ReceiptStep
               receipt={receipt}
+              activeTier={activeTier}
               selectedClubs={selectedClubs}
-              onReturnHome={handleReturnHome}
+              onViewAccount={handleViewAccount}
             />
           )}
 
@@ -405,6 +431,8 @@ function PaymentStep({
   onPay,
   breakdown,
   themeLabel,
+  paymentSpread,
+  setPaymentSpread,
 }: {
   cardNumber: string;
   setCardNumber: (v: string) => void;
@@ -417,12 +445,56 @@ function PaymentStep({
   onPay: () => void;
   breakdown: PackageBreakdown;
   themeLabel: string;
+  paymentSpread: PaymentSpread;
+  setPaymentSpread: (v: PaymentSpread) => void;
 }) {
+  const monthlyAmount = breakdown.packageSubscriptionTotal / 12;
   return (
     <div className="space-y-5 animate-fade-in-up">
       <div className="flex items-center gap-2 text-xs text-stone-500 bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2.5">
         <Lock className="w-3.5 h-3.5 text-emerald-600" />
         <span className="font-medium text-stone-700">Secured by Stripe SSL Encryption</span>
+      </div>
+
+      {/* Payment spread selector */}
+      <div className="rounded-2xl border border-stone-200 bg-white p-4 space-y-3">
+        <span className="text-xs font-medium text-stone-500 uppercase tracking-wide">
+          Subscription payment plan
+        </span>
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={() => setPaymentSpread("annually")}
+            className={`text-left rounded-xl border p-3 transition-all duration-200 ${
+              paymentSpread === "annually"
+                ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20"
+                : "border-stone-200 hover:border-stone-300"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <CalendarRange className="w-4 h-4 text-emerald-600" />
+              <span className="text-sm font-semibold text-stone-800">Pay Annually</span>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-1.5">One upfront annual payment</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaymentSpread("monthly")}
+            className={`text-left rounded-xl border p-3 transition-all duration-200 ${
+              paymentSpread === "monthly"
+                ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20"
+                : "border-stone-200 hover:border-stone-300"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Repeat className="w-4 h-4 text-emerald-600" />
+              <span className="text-sm font-semibold text-stone-800">Pay Monthly</span>
+            </div>
+            <p className="text-[11px] text-stone-500 mt-1.5">
+              12 monthly direct debits of {formatGBP(monthlyAmount)}
+            </p>
+          </button>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-stone-200 bg-gradient-to-br from-stone-50 to-white p-4 space-y-3">
@@ -472,6 +544,12 @@ function PaymentStep({
           <span>{themeLabel} package subscription</span>
           <span className="tabular-nums">{formatGBP(breakdown.packageSubscriptionTotal)}</span>
         </div>
+        {paymentSpread === "monthly" && (
+          <div className="flex items-center justify-between text-xs text-emerald-300">
+            <span>Monthly direct debit</span>
+            <span className="tabular-nums">{formatGBP(monthlyAmount)}/mo</span>
+          </div>
+        )}
         <div className="flex items-center justify-between text-xs text-stone-400">
           <span>Static upfront fees</span>
           <span className="tabular-nums">{formatGBP(breakdown.totalStaticUpfrontFees)}</span>
@@ -479,8 +557,15 @@ function PaymentStep({
         <div className="h-px bg-stone-700 my-1" />
         <div className="flex items-center justify-between text-sm font-semibold">
           <span>Charged today</span>
-          <span className="tabular-nums text-lg font-display">{formatGBP(breakdown.grandTotal)}</span>
+          <span className="tabular-nums text-lg font-display">
+            {formatGBP(paymentSpread === "monthly" ? breakdown.totalStaticUpfrontFees : breakdown.grandTotal)}
+          </span>
         </div>
+        {paymentSpread === "monthly" && (
+          <p className="text-[10px] text-stone-500 pt-0.5">
+            First monthly instalment of {formatGBP(monthlyAmount)} begins next month.
+          </p>
+        )}
       </div>
 
       {errorMsg && (
@@ -502,7 +587,7 @@ function PaymentStep({
           className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-medium py-3 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
         >
           <Lock className="w-4 h-4" />
-          Confirm &amp; Pay Upfront · {formatGBP(breakdown.grandTotal)}
+          Confirm &amp; Pay · {formatGBP(paymentSpread === "monthly" ? breakdown.totalStaticUpfrontFees : breakdown.grandTotal)}
         </button>
       </div>
     </div>
@@ -529,13 +614,21 @@ function ProcessingStep() {
 
 function ReceiptStep({
   receipt,
+  activeTier,
   selectedClubs,
-  onReturnHome,
+  onViewAccount,
 }: {
   receipt: ReceiptData;
+  activeTier: Tier;
   selectedClubs: ClubProfile[];
-  onReturnHome: () => void;
+  onViewAccount: () => void;
 }) {
+  const tierTheme = TIER_THEMES[receipt.tierClassification ?? activeTier];
+  const monthlyAmount = receipt.packageSubscriptionSubtotal / 12;
+  const chargedToday =
+    receipt.paymentSpreadType === "monthly"
+      ? receipt.staticFeesTotal
+      : receipt.grandTotal;
   const uuidShort = receipt.membershipPassUuid
     ? receipt.membershipPassUuid.toString().toUpperCase()
     : "—";
@@ -556,23 +649,23 @@ function ReceiptStep({
       </div>
 
       {/* Digital golf pass */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-stone-900 via-stone-800 to-emerald-900 text-white p-5 shadow-xl">
-        <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-emerald-500/20 blur-2xl" />
-        <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-emerald-400/10 blur-2xl" />
+      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br from-stone-900 via-stone-800 to-${tierTheme.accent}-900 text-white p-5 shadow-xl`}>
+        <div className={`absolute -top-12 -right-12 w-40 h-40 rounded-full bg-${tierTheme.accent}-500/20 blur-2xl`} />
+        <div className={`absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-${tierTheme.accent}-400/10 blur-2xl`} />
         <div className="relative">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-emerald-400" />
+              <Trophy className={`w-5 h-5 text-${tierTheme.accent}-400`} />
               <span className="font-display text-sm font-semibold tracking-wide">
                 NeoGolf Digital Pass
               </span>
             </div>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-semibold">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-${tierTheme.accent}-500/20 border border-${tierTheme.accent}-400/40 text-${tierTheme.accent}-300 text-[11px] font-semibold`}>
               <span className="relative flex w-2 h-2">
-                <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
-                <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-400" />
+                <span className={`absolute inline-flex w-full h-full rounded-full bg-${tierTheme.accent}-400 opacity-60 animate-ping`} />
+                <span className={`relative inline-flex w-2 h-2 rounded-full bg-${tierTheme.accent}-400`} />
               </span>
-              Active Pass
+              {tierTheme.label}
             </span>
           </div>
 
@@ -580,7 +673,7 @@ function ReceiptStep({
             <p className="text-[10px] uppercase tracking-widest text-stone-400">
               Membership UUID
             </p>
-            <p className="font-mono text-[11px] sm:text-xs text-emerald-200 break-all mt-1">
+            <p className={`font-mono text-[11px] sm:text-xs text-${tierTheme.accent}-200 break-all mt-1`}>
               {uuidShort}
             </p>
           </div>
@@ -596,38 +689,44 @@ function ReceiptStep({
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-2 text-[11px] text-emerald-200/90">
+          <div className={`mt-4 flex items-center gap-2 text-[11px] text-${tierTheme.accent}-200/90`}>
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Digital permissions open across your chosen golf courses.</span>
           </div>
         </div>
       </div>
 
-      {/* Receipt summary */}
+      {/* Receipt summary — split by payment spread */}
       <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 space-y-1.5 text-xs">
         <div className="flex items-center justify-between text-stone-500">
-          <span>Package subscription</span>
+          <span>Annual subscription</span>
           <span className="tabular-nums text-stone-800">
             {formatGBP(receipt.packageSubscriptionSubtotal)}
           </span>
         </div>
+        {receipt.paymentSpreadType === "monthly" && (
+          <div className="flex items-center justify-between text-emerald-700">
+            <span>Monthly direct debit (12 ×)</span>
+            <span className="tabular-nums">{formatGBP(monthlyAmount)}/mo</span>
+          </div>
+        )}
         <div className="flex items-center justify-between text-stone-500">
           <span>Static upfront fees</span>
           <span className="tabular-nums text-stone-800">{formatGBP(receipt.staticFeesTotal)}</span>
         </div>
         <div className="h-px bg-stone-200 my-1" />
         <div className="flex items-center justify-between text-sm font-semibold text-stone-900">
-          <span>Total paid</span>
-          <span className="tabular-nums">{formatGBP(receipt.grandTotal)}</span>
+          <span>{receipt.paymentSpreadType === "monthly" ? "Charged today" : "Total paid"}</span>
+          <span className="tabular-nums">{formatGBP(chargedToday)}</span>
         </div>
       </div>
 
       <button
-        onClick={onReturnHome}
-        className="w-full bg-stone-900 hover:bg-stone-800 text-white font-medium py-3 rounded-xl transition flex items-center justify-center gap-2"
+        onClick={onViewAccount}
+        className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-medium py-3 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
       >
         <Sparkles className="w-4 h-4" />
-        Return to Home
+        View My Account
       </button>
     </div>
   );

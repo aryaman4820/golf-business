@@ -4,9 +4,10 @@ import ConfigScreen from "./components/ConfigScreen";
 import PackageBuilder from "./components/PackageBuilder";
 import AdminPortal from "./components/AdminPortal";
 import Landing from "./components/Landing";
+import MyAccount from "./components/MyAccount";
 import type { Tier } from "./types";
 
-type View = "home" | "builder" | "admin";
+type View = "home" | "builder" | "admin" | "account";
 import {
   clearConfig,
   createSupabaseClient,
@@ -112,10 +113,26 @@ function ReadyRouter({
 }) {
   const [view, setView] = useState<View>("home");
   const [builderTier, setBuilderTier] = useState<Tier | null>(null);
+  const [accountPassUuid, setAccountPassUuid] = useState<string>("");
 
   function goBuilder(tier: Tier | null) {
     setBuilderTier(tier);
     setView("builder");
+  }
+
+  function goAccount(passUuid: string) {
+    setAccountPassUuid(passUuid);
+    setView("account");
+  }
+
+  if (view === "account") {
+    return (
+      <MyAccount
+        client={client}
+        membershipPassUuid={accountPassUuid}
+        onGoHome={() => setView("home")}
+      />
+    );
   }
 
   if (view === "admin") {
@@ -136,6 +153,7 @@ function ReadyRouter({
         onResetConfig={onResetConfig}
         onOpenAdmin={() => setView("admin")}
         onGoHome={() => setView("home")}
+        onViewAccount={goAccount}
       />
     );
   }
