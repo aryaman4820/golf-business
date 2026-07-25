@@ -208,11 +208,20 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   const distanceMap = useMemo(() => {
     const map: Record<string, number | null> = {};
     if (!userCenterCoords) return map;
+    const isValidCoord = (lat: number, lng: number) =>
+      !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
     for (const c of clubs) {
-      const clubCoords =
-        c.lat != null && c.lng != null
-          ? { lat: c.lat, lng: c.lng }
-          : clubCoordinatesMap[(c.location ?? "").trim()] ?? null;
+      const rawLat = c.lat != null ? Number(c.lat) : NaN;
+      const rawLng = c.lng != null ? Number(c.lng) : NaN;
+      let clubCoords: { lat: number; lng: number } | null = null;
+      if (isValidCoord(rawLat, rawLng)) {
+        clubCoords = { lat: rawLat, lng: rawLng };
+      } else {
+        const cached = clubCoordinatesMap[(c.location ?? "").trim()];
+        if (cached && isValidCoord(Number(cached.lat), Number(cached.lng))) {
+          clubCoords = { lat: Number(cached.lat), lng: Number(cached.lng) };
+        }
+      }
       if (!clubCoords) {
         map[c.id] = null;
         continue;
@@ -257,14 +266,15 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       if (c.id && seen.has(c.id)) return false;
       if (c.id) seen.add(c.id);
 
-      // Keyword-vs-radius conflict fix: when a radius is selected the typed
-      // query is treated purely as a location anchor for geocoding — it must
-      // NOT also act as a club-name filter, otherwise typing "Southport" with
-      // a 25-mile radius would hide every nearby club whose name lacks the
-      // word "Southport". Fuzzy name matching only applies when no radius is
-      // active, turning the query into a typo-tolerant club search instead.
-      const radiusActive = radiusNum !== null && center != null;
-      if (q && !radiusActive) {
+      // Keyword-vs-radius conflict fix: when a radius is selected AND the
+      // typed location resolved to real coordinates, the query is purely a
+      // location anchor — it must NOT also act as a club-name filter,
+      // otherwise typing "Manchester" with a 25-mile radius would hide
+      // nearby courses in Bolton or Stockport whose names don't contain
+      // "Manchester". Fuzzy name matching only applies when no radius is
+      // active (pure keyword search for a specific club name).
+      const radiusAnchorActive = radiusNum !== null && resolvedLocation != null;
+      if (q && !radiusAnchorActive) {
         const hay = `${c.name ?? ""} ${c.location ?? ""}`;
         if (!fuzzyMatch(query, hay)) return false;
       }
@@ -274,10 +284,10 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         const clubLat = Number(c.lat);
         const clubLng = Number(c.lng);
 
-        if (!isNaN(clubLat) && !isNaN(clubLng)) {
-          // (3c) Both user anchor and club coordinates are valid numbers:
-          // calculate Haversine distance in miles (R = 3958.8) and filter
-          // strictly by distanceMiles <= selectedRadius.
+        if (!isNaN(clubLat) && !isNaN(clubLng) && clubLat !== 0 && clubLng !== 0) {
+          // (3c) Both user anchor and club coordinates are valid numbers
+          // (and not Null Island 0,0): calculate Haversine distance in miles
+          // (R = 3958.8) and filter strictly by distanceMiles <= selectedRadius.
           const distanceMiles = haversineMiles(
             center.lat,
             center.lng,
@@ -286,11 +296,18 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
           );
           if (distanceMiles > radiusNum) return false;
         } else {
-          // (3b) A club has missing/null/NaN coordinates. DO NOT exclude it!
-          // Treat it as within radius (withinRadius = true / distance = 0)
-          // so courses are never hidden from users due to missing coords.
+          // (3b) A club has missing/null/NaN/0,0 coordinates. DO NOT exclude
+          // it! Fall back to the cached geocode map; if that is also missing
+          // or invalid, auto-include the course so it is never hidden from
+          // users due to missing coordinates.
           const cached = clubCoordinatesMap[(c.location ?? "").trim()];
-          if (cached && !isNaN(Number(cached.lat)) && !isNaN(Number(cached.lng))) {
+          if (
+            cached &&
+            !isNaN(Number(cached.lat)) &&
+            !isNaN(Number(cached.lng)) &&
+            Number(cached.lat) !== 0 &&
+            Number(cached.lng) !== 0
+          ) {
             const distanceMiles = haversineMiles(
               center.lat,
               center.lng,
@@ -327,12 +344,23 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       if (!centerCoords) return null;
       const clubLat = Number(club.lat);
       const clubLng = Number(club.lng);
-      if (!isNaN(clubLat) && !isNaN(clubLng)) {
+      if (!isNaN(clubLat) && !isNaN(clubLng) && clubLat !== 0 && clubLng !== 0) {
         return haversineMiles(centerCoords.lat, centerCoords.lng, clubLat, clubLng);
       }
       const cached = clubCoordinatesMap[(club.location ?? "").trim()];
-      if (cached) {
-        return haversineMiles(centerCoords.lat, centerCoords.lng, cached.lat, cached.lng);
+      if (
+        cached &&
+        !isNaN(Number(cached.lat)) &&
+        !isNaN(Number(cached.lng)) &&
+        Number(cached.lat) !== 0 &&
+        Number(cached.lng) !== 0
+      ) {
+        return haversineMiles(
+          centerCoords.lat,
+          centerCoords.lng,
+          Number(cached.lat),
+          Number(cached.lng),
+        );
       }
       return null;
     };
@@ -368,7 +396,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       filtered.length,
     );
     return filtered;
-  }, [clubs, activeTier, query, maxPrice, activeAmenities, radius, userCenterCoords, clubCoordinatesMap]);
+  }, [clubs, activeTier, query, maxPrice, activeAmenities, radius, userCenterCoords, resolvedLocation, clubCoordinatesMap]);
 
   // Flatten all tiers so a selection made in one tab persists when the user
   // switches tabs and adds clubs from another tier.
@@ -446,21 +474,10 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
                 }}
                 resultCount={filteredForActive.length}
                 totalCount={(grouped[activeTier] ?? []).length}
+                resolvedLocation={resolvedLocation}
                 show={showFilters}
                 setShow={setShowFilters}
               />
-              {resolvedLocation && radius !== null && (
-                <div className="flex items-center gap-2 text-sm text-stone-600 bg-stone-100 rounded-xl px-3 py-2">
-                  <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>
-                    Showing clubs near{" "}
-                    <strong className="text-stone-900">
-                      {resolvedLocation.displayName}
-                    </strong>{" "}
-                    within {radius} miles
-                  </span>
-                </div>
-              )}
               <div className="flex items-center justify-end">
                 <button
                   onClick={fetchClubs}
@@ -751,6 +768,7 @@ type FilterBarProps = {
   clearAll: () => void;
   resultCount: number;
   totalCount: number;
+  resolvedLocation: ResolvedLocation | null;
   show: boolean;
   setShow: (v: boolean) => void;
 };
@@ -767,6 +785,7 @@ function FilterBar({
   clearAll,
   resultCount,
   totalCount,
+  resolvedLocation,
   show,
   setShow,
 }: FilterBarProps) {
@@ -821,6 +840,12 @@ function FilterBar({
                     className="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl border border-stone-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-transparent transition-all duration-200"
                   />
                 </div>
+                {resolvedLocation && query.trim().length >= 3 && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 animate-in fade-in slide-in-from-top-1 duration-300">
+                    <MapPin className="w-3.5 h-3.5 shrink-0" />
+                    <span>Radius center: {resolvedLocation.displayName}</span>
+                  </div>
+                )}
               </div>
               <div className="md:col-span-1">
                 <label className="block text-[11px] font-medium uppercase tracking-wider text-stone-400 mb-1.5">
