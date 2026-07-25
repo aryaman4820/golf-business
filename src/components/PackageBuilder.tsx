@@ -6,7 +6,13 @@ import { TIER_ORDER } from "../types";
 import { TIER_THEMES, formatGBP } from "../lib/tiers";
 import ClubCard from "./ClubCard";
 import ShoppingBag from "./ShoppingBag";
-import { fetchCoordinates, haversineMiles, type LatLng } from "../lib/geo";
+import {
+  fetchCoordinates,
+  haversineMiles,
+  fuzzyMatch,
+  type LatLng,
+  type ResolvedLocation,
+} from "../lib/geo";
 
 export type RadiusOption = number | null;
 
@@ -49,6 +55,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
   const [activeAmenities, setActiveAmenities] = useState<Set<AmenityKey>>(new Set());
   const [radius, setRadius] = useState<RadiusOption>(null);
   const [userCenterCoords, setUserCenterCoords] = useState<LatLng | null>(null);
+  const [resolvedLocation, setResolvedLocation] = useState<ResolvedLocation | null>(null);
   // Persistent lookup cache: maps a club location string to its dynamically
   // resolved Photon coordinates. Each unique location is fetched at most
   // once to prevent duplicate network calls.
@@ -57,17 +64,28 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
 
   // Debounced dynamic geocoding of the typed location via the Komoot Photon
   // API. Fires 400ms after the user stops typing and stores the resolved
-  // global coordinate as the radius filter's center anchor.
+  // global coordinate as the radius filter's center anchor. The query is
+  // treated as a location anchor (geocoded via Photon) AND, when no radius is
+  // selected, as a fuzzy club-name filter that tolerates typos.
   useEffect(() => {
     const q = query.trim();
     if (q.length < 3) {
       setUserCenterCoords(null);
+      setResolvedLocation(null);
       return;
     }
     const handle = setTimeout(() => {
       let cancelled = false;
-      fetchCoordinates(q).then((coords) => {
-        if (!cancelled) setUserCenterCoords(coords);
+      fetchCoordinates(q).then((resolved: ResolvedLocation | null) => {
+        if (cancelled) return;
+        setUserCenterCoords(resolved);
+        setResolvedLocation(resolved);
+        console.log(
+          "Geocode resolved:",
+          resolved?.displayName,
+          "->",
+          resolved ? `${resolved.lat}, ${resolved.lng}` : "no match",
+        );
       });
       return () => {
         cancelled = true;
@@ -239,11 +257,17 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
       if (c.id && seen.has(c.id)) return false;
       if (c.id) seen.add(c.id);
 
-      if (q) {
-        const hay = `${c.name ?? ""} ${c.location ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+      // Keyword-vs-radius conflict fix: when a radius is selected the typed
+      // query is treated purely as a location anchor for geocoding — it must
+      // NOT also act as a club-name filter, otherwise typing "Southport" with
+      // a 25-mile radius would hide every nearby club whose name lacks the
+      // word "Southport". Fuzzy name matching only applies when no radius is
+      // active, turning the query into a typo-tolerant club search instead.
+      const radiusActive = radiusNum !== null && center != null;
+      if (q && !radiusActive) {
+        const hay = `${c.name ?? ""} ${c.location ?? ""}`;
+        if (!fuzzyMatch(query, hay)) return false;
       }
-
       // (3b/3c/3d) Bulletproof radius filtering.
       if (radiusNum !== null && center) {
         // (3a) Convert coordinates safely to numbers.
@@ -425,6 +449,18 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
                 show={showFilters}
                 setShow={setShowFilters}
               />
+              {resolvedLocation && radius !== null && (
+                <div className="flex items-center gap-2 text-sm text-stone-600 bg-stone-100 rounded-xl px-3 py-2">
+                  <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    Showing clubs near{" "}
+                    <strong className="text-stone-900">
+                      {resolvedLocation.displayName}
+                    </strong>{" "}
+                    within {radius} miles
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-end">
                 <button
                   onClick={fetchClubs}
