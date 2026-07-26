@@ -125,12 +125,17 @@ function ReadyRouter({
     setView("account");
   }
 
+  function openAccount() {
+    setView("account");
+  }
+
   if (view === "account") {
     return (
       <MyAccount
         client={client}
         membershipPassUuid={accountPassUuid}
         onGoHome={() => setView("home")}
+        onBuildPackage={() => goBuilder(null)}
       />
     );
   }
@@ -154,6 +159,7 @@ function ReadyRouter({
         onOpenAdmin={() => setView("admin")}
         onGoHome={() => setView("home")}
         onViewAccount={goAccount}
+        onOpenAccount={openAccount}
       />
     );
   }
@@ -164,6 +170,7 @@ function ReadyRouter({
       onBuildPackage={() => goBuilder(null)}
       onViewInBuilder={(tier) => goBuilder(tier)}
       onOpenAdmin={() => setView("admin")}
+      onOpenAccount={openAccount}
     />
   );
 }

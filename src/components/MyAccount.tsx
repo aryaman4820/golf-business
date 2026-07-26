@@ -13,6 +13,8 @@ import {
   GraduationCap,
   Layers,
   PoundSterling,
+  Award,
+  ArrowRight,
 } from "lucide-react";
 import type { ClubProfile, Tier } from "../types";
 import { TIER_THEMES, formatGBP } from "../lib/tiers";
@@ -22,6 +24,7 @@ type Props = {
   client: SupabaseClient;
   membershipPassUuid: string;
   onGoHome: () => void;
+  onBuildPackage: () => void;
 };
 
 type MembershipRow = {
@@ -41,13 +44,17 @@ type MembershipRow = {
   created_at: string;
 };
 
-export default function MyAccount({ client, membershipPassUuid, onGoHome }: Props) {
+export default function MyAccount({ client, membershipPassUuid, onGoHome, onBuildPackage }: Props) {
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   const [clubs, setClubs] = useState<ClubProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!membershipPassUuid) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -94,6 +101,55 @@ export default function MyAccount({ client, membershipPassUuid, onGoHome }: Prop
       cancelled = true;
     };
   }, [client, membershipPassUuid]);
+
+  if (!membershipPassUuid) {
+    return (
+      <div className="min-h-screen bg-stone-50">
+        <header className="bg-white border-b border-stone-200">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+                <span className="font-display text-white font-bold text-lg leading-none">N</span>
+              </div>
+              <span className="font-display text-xl font-medium tracking-tight text-stone-900">
+                My Account
+              </span>
+            </div>
+            <button
+              onClick={onGoHome}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-stone-900 px-3.5 py-2 rounded-lg hover:bg-stone-100 transition"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Home
+            </button>
+          </div>
+        </header>
+        <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+          <div className="text-center animate-fade-in-up">
+            <div className="relative inline-flex items-center justify-center mb-6">
+              <div className="absolute inset-0 bg-emerald-400/20 blur-2xl rounded-full" />
+              <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 border border-emerald-200 flex items-center justify-center">
+                <Award className="w-9 h-9 text-emerald-600" />
+              </div>
+            </div>
+            <h1 className="font-display text-2xl sm:text-3xl font-light text-stone-900 leading-tight">
+              You haven't activated a NeoGolf Membership yet.
+            </h1>
+            <p className="mt-4 text-sm sm:text-base text-stone-500 leading-relaxed max-w-md mx-auto">
+              Bundle multi-course playing rights across the North West's premium golf network. One subscription, unlimited fairways — build your custom package and unlock your digital club pass today.
+            </p>
+            <button
+              onClick={onBuildPackage}
+              className="group mt-8 inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-medium px-7 py-3.5 rounded-full transition-all duration-300 shadow-lg shadow-emerald-500/20 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:-translate-y-0.5"
+            >
+              Build Your Package Now
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

@@ -68,8 +68,8 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
   const canSubmit = count > 0 && emailValid && (!isStudent || isStudentVerified);
 
   return (
-    <aside className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-stone-800">
+    <aside className="flex flex-col h-full max-h-[calc(100vh-100px)]">
+      <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-stone-800">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="relative flex-shrink-0">
             <ShoppingBagIcon className="w-5 h-5 text-emerald-400" />
@@ -99,7 +99,7 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 no-scrollbar">
+      <div className="flex-1 overflow-y-auto px-5 py-4 pr-1 space-y-3">
         {count === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-10">
             <div className="w-16 h-16 rounded-full bg-stone-800/60 flex items-center justify-center mb-4">
@@ -158,7 +158,7 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
         )}
       </div>
 
-      <div className="border-t border-stone-800 px-5 py-4 space-y-3">
+      <div className="shrink-0 border-t border-stone-800 px-5 py-4 space-y-3 mt-auto">
         <CustomerControls
           age={userAge}
           setAge={(v) => {

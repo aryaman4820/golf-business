@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Database, Search, AlertTriangle, ShieldCheck, Home, SlidersHorizontal, X, Car, UtensilsCrossed, Dumbbell, Warehouse, MapPin } from "lucide-react";
+import { RefreshCw, Database, Search, AlertTriangle, ShieldCheck, Home, SlidersHorizontal, X, Car, UtensilsCrossed, Dumbbell, Warehouse, MapPin, User } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClubProfile, Tier } from "../types";
 import { TIER_ORDER } from "../types";
@@ -32,9 +32,10 @@ type Props = {
   onOpenAdmin: () => void;
   onGoHome?: () => void;
   onViewAccount?: (membershipPassUuid: string) => void;
+  onOpenAccount?: () => void;
 };
 
-export default function PackageBuilder({ client, initialTier, onResetConfig, onOpenAdmin, onGoHome, onViewAccount }: Props) {
+export default function PackageBuilder({ client, initialTier, onResetConfig, onOpenAdmin, onGoHome, onViewAccount, onOpenAccount }: Props) {
   const [activeTier, setActiveTier] = useState<Tier>(initialTier ?? "Premium");
 
   useEffect(() => {
@@ -420,6 +421,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
         onResetConfig={onResetConfig}
         onOpenAdmin={onOpenAdmin}
         onGoHome={onGoHome}
+        onOpenAccount={onOpenAccount}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -579,12 +581,14 @@ function Header({
   onResetConfig,
   onOpenAdmin,
   onGoHome,
+  onOpenAccount,
 }: {
   filledCount: number;
   onOpenBag: () => void;
   onResetConfig: () => void;
   onOpenAdmin: () => void;
   onGoHome?: () => void;
+  onOpenAccount?: () => void;
 }) {
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-stone-200">
@@ -612,6 +616,15 @@ function Header({
             >
               <Home className="w-4 h-4" />
               Home
+            </button>
+          )}
+          {onOpenAccount && (
+            <button
+              onClick={onOpenAccount}
+              className="hidden sm:inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-900 transition px-3 py-2 rounded-lg hover:bg-stone-100"
+            >
+              <User className="w-4 h-4" />
+              My Account
             </button>
           )}
           <button

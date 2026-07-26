@@ -6,6 +6,7 @@ import {
   ArrowRight,
   Lock,
   Loader2,
+  User,
 } from "lucide-react";
 import type { ClubProfile, Tier } from "../types";
 import { TIER_THEMES, formatGBP } from "../lib/tiers";
@@ -15,6 +16,7 @@ type Props = {
   onBuildPackage: () => void;
   onViewInBuilder: (tier: Tier) => void;
   onOpenAdmin: () => void;
+  onOpenAccount: () => void;
 };
 
 type Slide = {
@@ -68,6 +70,7 @@ export default function Landing({
   onBuildPackage,
   onViewInBuilder,
   onOpenAdmin,
+  onOpenAccount,
 }: Props) {
   const [clubs, setClubs] = useState<ClubProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +114,7 @@ export default function Landing({
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <Carousel slides={SLIDES} onBuildPackage={onBuildPackage} onOpenAdmin={onOpenAdmin} />
+      <Carousel slides={SLIDES} onBuildPackage={onBuildPackage} onOpenAdmin={onOpenAdmin} onOpenAccount={onOpenAccount} />
       <SearchSection
         query={query}
         setQuery={setQuery}
@@ -133,10 +136,12 @@ function Carousel({
   slides,
   onBuildPackage,
   onOpenAdmin,
+  onOpenAccount,
 }: {
   slides: Slide[];
   onBuildPackage: () => void;
   onOpenAdmin: () => void;
+  onOpenAccount: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const [scrolled, setScrolled] = useState(false);
@@ -204,6 +209,13 @@ function Carousel({
               className="text-sm text-white/90 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition"
             >
               Package Builder
+            </button>
+            <button
+              onClick={onOpenAccount}
+              className="inline-flex items-center gap-1.5 text-sm text-white/90 hover:text-white px-3 py-2 rounded-lg hover:bg-white/10 transition"
+            >
+              <User className="w-3.5 h-3.5" />
+              My Account
             </button>
             <button
               onClick={onOpenAdmin}
