@@ -15,15 +15,11 @@ import {
   Info,
   AlertCircle,
   Lock,
-  ChevronDown,
   Receipt,
-  TrendingUp,
-  Layers,
-  ShieldHalf,
   MapPin,
 } from "lucide-react";
 import type { ClubProfile, Tier } from "../types";
-import { TIER_THEMES, formatGBP, type TierTheme } from "../lib/tiers";
+import { TIER_THEMES, formatGBP } from "../lib/tiers";
 import {
   resolveClubPrice,
   computePackageBreakdown,
@@ -68,7 +64,7 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
   const canSubmit = count > 0 && emailValid && (!isStudent || isStudentVerified);
 
   return (
-    <aside className="flex flex-col h-full max-h-[calc(100vh-100px)]">
+    <aside className="flex flex-col h-full max-h-[calc(100vh-80px)]">
       <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-stone-800">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="relative flex-shrink-0">
@@ -158,7 +154,7 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
         )}
       </div>
 
-      <div className="shrink-0 border-t border-stone-800 px-5 py-4 space-y-3 mt-auto">
+      <div className="shrink-0 border-t border-stone-800 px-5 py-4 space-y-3 mt-auto bg-black/90">
         <CustomerControls
           age={userAge}
           setAge={(v) => {
@@ -177,25 +173,7 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
           setIsStudentVerified={setIsStudentVerified}
         />
 
-        {count > 0 && (
-          <PackageDashboard
-            breakdown={breakdown}
-            theme={theme}
-            selectedClubs={selectedClubs}
-            ctx={ctx}
-            userAge={userAge}
-            isStudentVerified={isStudentVerified}
-          />
-        )}
-        <div className="flex items-center justify-between text-sm pt-1">
-          <span className="text-stone-400">6. Grand total</span>
-          <span
-            key={breakdown.grandTotal}
-            className="font-display text-2xl font-bold text-white tabular-nums animate-cross-fade"
-          >
-            {formatGBP(breakdown.grandTotal)}
-          </span>
-        </div>
+        {count > 0 && <CleanSummary breakdown={breakdown} />}
         <button
           disabled={!canSubmit}
           onClick={() => setCheckoutOpen(true)}
@@ -214,9 +192,6 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
             </>
           )}
         </button>
-        <p className="text-[11px] text-stone-500 text-center">
-          Revenue-share base + standalone-max floor + extra courses + static upfront fees
-        </p>
       </div>
 
       <CheckoutModal
@@ -236,212 +211,46 @@ export default function ShoppingBag({ activeTier, selectedClubs, client, onRemov
   );
 }
 
-function PackageDashboard({
-  breakdown,
-  theme,
-  selectedClubs,
-  ctx,
-  userAge,
-  isStudentVerified,
-}: {
-  breakdown: PackageBreakdown;
-  theme: TierTheme;
-  selectedClubs: ClubProfile[];
-  ctx: PricingContext;
-  userAge: number;
-  isStudentVerified: boolean;
-}) {
-  const [feesOpen, setFeesOpen] = useState(false);
-  const capTriggered =
-    breakdown.highestStandalonePrice > 0 &&
-    breakdown.calculatedBasePrice >= breakdown.highestStandalonePrice * 1.1 &&
-    breakdown.totalRevenueSum > 0;
-
+function CleanSummary({ breakdown }: { breakdown: PackageBreakdown }) {
   return (
     <div className="rounded-2xl bg-gradient-to-br from-emerald-950 via-stone-900 to-stone-900 border border-emerald-800/40 shadow-xl shadow-emerald-950/30 overflow-hidden">
       <div className="px-4 py-3 bg-emerald-900/20 border-b border-emerald-800/30 flex items-center gap-2">
         <Receipt className="w-4 h-4 text-emerald-400" />
         <span className="text-xs font-semibold text-emerald-300 uppercase tracking-wide">
-          Package Breakdown
+          Package Summary
         </span>
       </div>
-
       <div className="p-4 space-y-3">
-        {/* Weighted Base Subscription */}
-        <DashboardRow
-          icon={<TrendingUp className="w-4 h-4 text-emerald-400" />}
-          label="Weighted Base Subscription"
-          hint={`(Σ revenue ÷ Σ members) × 1.12`}
-          value={breakdown.calculatedBasePrice}
-        />
-
-        {/* Included Courses badge */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <Layers className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-stone-200">Included Courses</div>
-              <div className="text-[10px] text-stone-500">
-                Up to {INCLUDED_COURSES} bundled in your base rate
-              </div>
-            </div>
-          </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-stone-300">Package Membership Rate</span>
           <span
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold tabular-nums animate-cross-fade ${
-              breakdown.clubCount > INCLUDED_COURSES
-                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-            }`}
-            key={`slots-${breakdown.clubCount}`}
+            key={breakdown.packageSubscriptionTotal}
+            className="text-sm font-semibold text-emerald-200 tabular-nums animate-cross-fade"
           >
-            {breakdown.clubCount} of {INCLUDED_COURSES} slots filled
+            {formatGBP(breakdown.packageSubscriptionTotal)}/yr
           </span>
         </div>
-
-        {/* Extra Course Surcharges (only when > 4) */}
-        {breakdown.extraCourseCount > 0 && (
-          <DashboardRow
-            icon={<Plus className="w-4 h-4 text-amber-400" />}
-            label="Extra Course Surcharges"
-            hint={`${breakdown.extraCourseCount} × ${formatGBP(breakdown.extraCourseFeePer)} · ${theme.label} tier`}
-            value={breakdown.totalExtraCourseFees}
-            tone="amber"
-          />
-        )}
-
-        {/* Cap floor badge */}
-        {capTriggered && (
-          <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 animate-cross-fade">
-            <ShieldHalf className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <div className="text-[11px] font-semibold text-amber-300">
-                NeoGolf Floor Capping Applied
-              </div>
-              <div className="text-[10px] text-amber-200/80 leading-tight">
-                Ensuring maximum return protections for member clubs.
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Subscription subtotal */}
-        <div className="flex items-center justify-between pt-1 border-t border-emerald-800/30">
-          <span className="text-xs text-stone-400">Package subscription total</span>
-          <AnimatedValue value={breakdown.packageSubscriptionTotal} className="text-sm font-semibold text-emerald-200" />
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-stone-300">Due Upfront Today</span>
+          <span
+            key={breakdown.totalStaticUpfrontFees}
+            className="text-sm font-semibold text-white tabular-nums animate-cross-fade"
+          >
+            {formatGBP(breakdown.totalStaticUpfrontFees)}
+          </span>
         </div>
-      </div>
-
-      {/* Upfront fees section */}
-      <div className="border-t border-emerald-800/30">
-        <button
-          onClick={() => setFeesOpen((v) => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-900/10 transition"
-        >
-          <div className="flex items-center gap-2 text-left">
-            <Receipt className="w-4 h-4 text-emerald-400" />
-            <div>
-              <div className="text-xs font-semibold text-emerald-300 uppercase tracking-wide">
-                Due Upfront Today
-              </div>
-              <div className="text-[10px] text-stone-500">
-                To secure membership slots
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <AnimatedValue value={breakdown.totalStaticUpfrontFees} className="text-sm font-semibold text-white" />
-            <ChevronDown
-              className={`w-4 h-4 text-stone-400 transition-transform duration-300 ${feesOpen ? "rotate-180" : ""}`}
-            />
-          </div>
-        </button>
-
-        <div
-          className={`grid transition-all duration-300 ease-out ${
-            feesOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-          }`}
-        >
-          <div className="overflow-hidden">
-            <div className="px-4 pb-3 space-y-1.5">
-              {selectedClubs.map((club) => {
-                const joining = Number(club.joining_fee_7day) || 0;
-                const levy = Number(club.clubhouse_bar_levy) || 0;
-                return (
-                  <div
-                    key={club.id}
-                    className="flex items-center justify-between gap-2 text-[11px] bg-stone-800/40 rounded-lg px-3 py-2"
-                  >
-                    <span className="text-stone-300 truncate">{club.name}</span>
-                    <div className="flex items-center gap-3 tabular-nums flex-shrink-0">
-                      <span className="text-stone-400">
-                        Join <span className="text-stone-200">{formatGBP(joining)}</span>
-                      </span>
-                      <span className="text-stone-400">
-                        Levy <span className="text-stone-200">{formatGBP(levy)}</span>
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              <div className="flex items-center justify-between text-[11px] pt-1.5 px-1">
-                <span className="text-stone-400">Joining fees total</span>
-                <AnimatedValue value={breakdown.totalJoining} className="font-medium text-stone-200 tabular-nums" />
-              </div>
-              <div className="flex items-center justify-between text-[11px] px-1">
-                <span className="text-stone-400">Bar levies total</span>
-                <AnimatedValue value={breakdown.totalLevy} className="font-medium text-stone-200 tabular-nums" />
-              </div>
-            </div>
-          </div>
+        <div className="h-px bg-emerald-800/30" />
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-stone-100">Total Payable</span>
+          <span
+            key={breakdown.grandTotal}
+            className="font-display text-lg font-bold text-white tabular-nums animate-cross-fade"
+          >
+            {formatGBP(breakdown.grandTotal)}
+          </span>
         </div>
       </div>
     </div>
-  );
-}
-
-function DashboardRow({
-  icon,
-  label,
-  hint,
-  value,
-  tone,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  hint?: string;
-  value: number;
-  tone?: "amber";
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 min-w-0">
-        {icon}
-        <div className="min-w-0">
-          <div className="text-xs font-medium text-stone-200">{label}</div>
-          {hint && <div className="text-[10px] text-stone-500 leading-tight">{hint}</div>}
-        </div>
-      </div>
-      <AnimatedValue
-        value={value}
-        className={`text-sm font-semibold tabular-nums flex-shrink-0 ${
-          tone === "amber" ? "text-amber-300" : "text-emerald-200"
-        }`}
-      />
-    </div>
-  );
-}
-
-function AnimatedValue({
-  value,
-  className,
-}: {
-  value: number;
-  className?: string;
-}) {
-  return (
-    <span key={value} className={`${className ?? ""} animate-cross-fade`}>
-      {formatGBP(value)}
-    </span>
   );
 }
 

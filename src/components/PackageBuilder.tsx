@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, Database, Search, AlertTriangle, ShieldCheck, Home, SlidersHorizontal, X, Car, UtensilsCrossed, Dumbbell, Warehouse, MapPin, User } from "lucide-react";
+import { RefreshCw, Database, Search, AlertTriangle, ShieldCheck, Home, SlidersHorizontal, X, Car, UtensilsCrossed, Dumbbell, Warehouse, MapPin, User, Layers, Info, CheckCircle2, Plus } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ClubProfile, Tier } from "../types";
 import { TIER_ORDER } from "../types";
 import { TIER_THEMES, formatGBP } from "../lib/tiers";
 import ClubCard from "./ClubCard";
+import { EXTRA_COURSE_FEE, INCLUDED_COURSES } from "../lib/pricing";
 import ShoppingBag from "./ShoppingBag";
 import {
   fetchCoordinates,
@@ -488,6 +489,7 @@ export default function PackageBuilder({ client, initialTier, onResetConfig, onO
             </div>
 
             <div className="mt-6">
+              <BundleRulesBanner activeTier={activeTier} selectedCount={selectedClubs.length} />
               <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-stone-500">
                 <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>
@@ -770,6 +772,99 @@ function EmptyState({ query, tier }: { query: string; tier: Tier }) {
       <p className="text-sm text-stone-500 mt-1">
         {query ? "Try a different search term." : "Clubs in this tier will appear here."}
       </p>
+    </div>
+  );
+}
+
+function BundleRulesBanner({ activeTier, selectedCount }: { activeTier: Tier; selectedCount: number }) {
+  const extraFee = EXTRA_COURSE_FEE[activeTier];
+  const withinAllowance = selectedCount <= INCLUDED_COURSES;
+  const extraCount = Math.max(0, selectedCount - INCLUDED_COURSES);
+
+  return (
+    <div className="mb-5 space-y-3 animate-in fade-in slide-in-from-top-2 duration-500">
+      {/* Main informational banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200/60 p-4 sm:p-5">
+        <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-emerald-400/10 blur-2xl" />
+        <div className="relative flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
+            <Layers className="w-5 h-5 text-emerald-600" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-display text-sm font-semibold text-stone-800 leading-snug">
+              Your NeoGolf Membership includes up to {INCLUDED_COURSES} championship golf courses of your choice at no extra cost!
+            </h3>
+            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
+              Pick your favourite {INCLUDED_COURSES} courses and bundle them into one annual subscription. Want more? Expand your bundle with transparent per-course add-ons.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-tier surcharge rate card */}
+      <div className="rounded-2xl border border-stone-200 bg-white p-3.5 shadow-sm">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <Info className="w-3.5 h-3.5 text-stone-400" />
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-stone-400">
+            Add-on surcharge rates by tier
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {TIER_ORDER.map((tier) => {
+            const theme = TIER_THEMES[tier];
+            const isActive = tier === activeTier;
+            return (
+              <div
+                key={tier}
+                className={`rounded-xl border p-2.5 text-center transition-all duration-200 ${
+                  isActive
+                    ? `${theme.border} ${theme.accentSoft} ring-2 ring-offset-1 ${theme.ring}/30`
+                    : "border-stone-200 bg-stone-50"
+                }`}
+              >
+                <p className={`text-[10px] font-semibold uppercase tracking-wide ${isActive ? "" : "text-stone-400"}`}>
+                  {theme.label}
+                </p>
+                <p className={`text-sm font-bold tabular-nums mt-0.5 ${isActive ? "" : "text-stone-600"}`}>
+                  +{formatGBP(EXTRA_COURSE_FEE[tier])}
+                  <span className="text-[10px] font-normal text-stone-400">/course</span>
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Live selection status */}
+      {selectedCount > 0 && (
+        <div
+          className={`flex items-center gap-2.5 rounded-xl border px-4 py-2.5 transition-all duration-300 animate-in fade-in ${
+            withinAllowance
+              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+              : "bg-amber-50 border-amber-200 text-amber-800"
+          }`}
+        >
+          {withinAllowance ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          ) : (
+            <Plus className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          )}
+          <span className="text-xs font-medium">
+            {withinAllowance ? (
+              <>
+                {selectedCount} of {INCLUDED_COURSES} included slots filled —{" "}
+                {INCLUDED_COURSES - selectedCount} remaining at no extra cost.
+              </>
+            ) : (
+              <>
+                {extraCount} add-on course{extraCount === 1 ? "" : "s"} beyond your{" "}
+                {INCLUDED_COURSES}-course allowance — surcharge of{" "}
+                {formatGBP(extraCount * extraFee)} applied at checkout.
+              </>
+            )}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

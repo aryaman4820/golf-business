@@ -136,6 +136,7 @@ function ReadyRouter({
         membershipPassUuid={accountPassUuid}
         onGoHome={() => setView("home")}
         onBuildPackage={() => goBuilder(null)}
+        onMembershipLoaded={(uuid) => setAccountPassUuid(uuid)}
       />
     );
   }

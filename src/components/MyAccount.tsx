@@ -15,6 +15,12 @@ import {
   PoundSterling,
   Award,
   ArrowRight,
+  User as UserIcon,
+  Mail,
+  Phone,
+  Lock,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
 import type { ClubProfile, Tier } from "../types";
 import { TIER_THEMES, formatGBP } from "../lib/tiers";
@@ -25,6 +31,7 @@ type Props = {
   membershipPassUuid: string;
   onGoHome: () => void;
   onBuildPackage: () => void;
+  onMembershipLoaded?: (passUuid: string) => void;
 };
 
 type MembershipRow = {
@@ -44,7 +51,7 @@ type MembershipRow = {
   created_at: string;
 };
 
-export default function MyAccount({ client, membershipPassUuid, onGoHome, onBuildPackage }: Props) {
+export default function MyAccount({ client, membershipPassUuid, onGoHome, onBuildPackage, onMembershipLoaded }: Props) {
   const [membership, setMembership] = useState<MembershipRow | null>(null);
   const [clubs, setClubs] = useState<ClubProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,50 +111,12 @@ export default function MyAccount({ client, membershipPassUuid, onGoHome, onBuil
 
   if (!membershipPassUuid) {
     return (
-      <div className="min-h-screen bg-stone-50">
-        <header className="bg-white border-b border-stone-200">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
-                <span className="font-display text-white font-bold text-lg leading-none">N</span>
-              </div>
-              <span className="font-display text-xl font-medium tracking-tight text-stone-900">
-                My Account
-              </span>
-            </div>
-            <button
-              onClick={onGoHome}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-stone-900 px-3.5 py-2 rounded-lg hover:bg-stone-100 transition"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Home
-            </button>
-          </div>
-        </header>
-        <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-          <div className="text-center animate-fade-in-up">
-            <div className="relative inline-flex items-center justify-center mb-6">
-              <div className="absolute inset-0 bg-emerald-400/20 blur-2xl rounded-full" />
-              <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 border border-emerald-200 flex items-center justify-center">
-                <Award className="w-9 h-9 text-emerald-600" />
-              </div>
-            </div>
-            <h1 className="font-display text-2xl sm:text-3xl font-light text-stone-900 leading-tight">
-              You haven't activated a NeoGolf Membership yet.
-            </h1>
-            <p className="mt-4 text-sm sm:text-base text-stone-500 leading-relaxed max-w-md mx-auto">
-              Bundle multi-course playing rights across the North West's premium golf network. One subscription, unlimited fairways — build your custom package and unlock your digital club pass today.
-            </p>
-            <button
-              onClick={onBuildPackage}
-              className="group mt-8 inline-flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-medium px-7 py-3.5 rounded-full transition-all duration-300 shadow-lg shadow-emerald-500/20 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:-translate-y-0.5"
-            >
-              Build Your Package Now
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-            </button>
-          </div>
-        </main>
-      </div>
+      <MemberPortal
+        client={client}
+        onGoHome={onGoHome}
+        onBuildPackage={onBuildPackage}
+        onMembershipLoaded={onMembershipLoaded}
+      />
     );
   }
 
@@ -533,5 +502,245 @@ function RosterCard({ club, theme }: { club: ClubProfile; theme: (typeof TIER_TH
         </a>
       </div>
     </article>
+  );
+}
+
+function MemberPortal({
+  client,
+  onGoHome,
+  onBuildPackage,
+  onMembershipLoaded,
+}: {
+  client: SupabaseClient;
+  onGoHome: () => void;
+  onBuildPackage: () => void;
+  onMembershipLoaded?: (passUuid: string) => void;
+}) {
+  const [mode, setMode] = useState<"signin" | "register">("register");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const inputClass =
+    "w-full text-sm text-stone-800 placeholder:text-stone-300 bg-stone-50 border border-stone-200 rounded-xl py-2.5 pl-10 pr-3 focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white transition";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    if (mode === "register") {
+      if (!fullName.trim() || !email.trim() || !password) {
+        setErrorMsg("Please fill in your name, email, and password.");
+        return;
+      }
+    } else {
+      if (!email.trim() || !password) {
+        setErrorMsg("Please enter your email and password.");
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      if (mode === "register") {
+        const { data, error } = await client.auth.signUp({
+          email: email.trim(),
+          password,
+          options: { data: { full_name: fullName.trim(), phone: phone.trim() } },
+        });
+        if (error) throw error;
+        if (data.user) {
+          const { data: mem } = await client
+            .from("user_memberships")
+            .select("membership_pass_uuid")
+            .eq("customer_email", email.trim())
+            .maybeSingle();
+          if (mem?.membership_pass_uuid) {
+            onMembershipLoaded?.(mem.membership_pass_uuid);
+            return;
+          }
+        }
+        setMode("signin");
+        setErrorMsg("Account created. Please sign in to access your membership.");
+      } else {
+        const { data, error } = await client.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (error) throw error;
+        if (data.user) {
+          const { data: mem } = await client
+            .from("user_memberships")
+            .select("membership_pass_uuid")
+            .eq("customer_email", data.user.email ?? email.trim())
+            .maybeSingle();
+          if (mem?.membership_pass_uuid) {
+            onMembershipLoaded?.(mem.membership_pass_uuid);
+            return;
+          }
+          setErrorMsg("No active membership found for this account. Build a package to get started.");
+        }
+      }
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Authentication failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50">
+      <header className="bg-white border-b border-stone-200">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+              <span className="font-display text-white font-bold text-lg leading-none">N</span>
+            </div>
+            <span className="font-display text-xl font-medium tracking-tight text-stone-900">
+              Member Portal
+            </span>
+          </div>
+          <button
+            onClick={onGoHome}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-600 hover:text-stone-900 px-3.5 py-2 rounded-lg hover:bg-stone-100 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Home
+          </button>
+        </div>
+      </header>
+
+      <main className="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+        <div className="text-center mb-6 animate-fade-in-up">
+          <div className="relative inline-flex items-center justify-center mb-4">
+            <div className="absolute inset-0 bg-emerald-400/20 blur-2xl rounded-full" />
+            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 border border-emerald-200 flex items-center justify-center">
+              <Award className="w-7 h-7 text-emerald-600" />
+            </div>
+          </div>
+          <h1 className="font-display text-2xl font-light text-stone-900">
+            Access Your Digital Pass
+          </h1>
+          <p className="mt-2 text-sm text-stone-500">
+            Sign in to view your membership, or create an account to get started.
+          </p>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden animate-fade-in-up" style={{ animationDelay: "80ms" }}>
+          {/* Tab toggle */}
+          <div className="flex border-b border-stone-200">
+            <button
+              onClick={() => { setMode("signin"); setErrorMsg(null); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition ${
+                mode === "signin"
+                  ? "text-emerald-700 border-b-2 border-emerald-500 bg-emerald-50/50"
+                  : "text-stone-400 hover:text-stone-600"
+              }`}
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </button>
+            <button
+              onClick={() => { setMode("register"); setErrorMsg(null); }}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-medium transition ${
+                mode === "register"
+                  ? "text-emerald-700 border-b-2 border-emerald-500 bg-emerald-50/50"
+                  : "text-stone-400 hover:text-stone-600"
+              }`}
+            >
+              <UserPlus className="w-4 h-4" />
+              Create Account
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="p-5 space-y-4">
+            {mode === "register" && (
+              <div className="relative">
+                <UserIcon className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Full name"
+                  className={inputClass}
+                />
+              </div>
+            )}
+            <div className="relative">
+              <Mail className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email address"
+                className={inputClass}
+              />
+            </div>
+            {mode === "register" && (
+              <div className="relative">
+                <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Phone number"
+                  className={inputClass}
+                />
+              </div>
+            )}
+            <div className="relative">
+              <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className={inputClass}
+              />
+            </div>
+
+            {errorMsg && (
+              <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+                {errorMsg}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50 text-white font-medium py-3 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : mode === "register" ? (
+                <>
+                  <UserPlus className="w-4 h-4" />
+                  Create Account
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  Sign In
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+
+        <div className="text-center mt-6 animate-fade-in-up" style={{ animationDelay: "160ms" }}>
+          <p className="text-xs text-stone-400">Don't have a membership yet?</p>
+          <button
+            onClick={onBuildPackage}
+            className="group mt-2 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700 transition"
+          >
+            Build Your Package Now
+            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+          </button>
+        </div>
+      </main>
+    </div>
   );
 }

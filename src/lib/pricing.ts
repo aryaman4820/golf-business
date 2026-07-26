@@ -38,7 +38,7 @@ export function resolveClubPrice(
   return finalPrice > 0 ? finalPrice : basePeak;
 }
 
-const EXTRA_COURSE_FEE: Record<Tier, number> = {
+export const EXTRA_COURSE_FEE: Record<Tier, number> = {
   Budget: 50,
   "Mid-tier": 100,
   Premium: 200,
